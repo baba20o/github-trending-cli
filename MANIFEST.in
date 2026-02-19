@@ -1,0 +1,8 @@
+include LICENSE
+include README.md
+include CHANGELOG.md
+include github_trending.py
+include analyzer.py
+exclude test_github_trending.py
+exclude .env
+exclude .env.*

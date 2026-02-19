@@ -7,7 +7,7 @@ name = "github-trending-cli"
 version = "1.0.2"
 description = "A powerful CLI tool for discovering and evaluating GitHub trending repositories, designed for AI agents"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.7"
 authors = [
     {name = "GitHub Trending CLI Contributors"}
@@ -25,7 +25,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",
@@ -48,4 +47,4 @@ github-trending = "github_trending:main"
 gt = "github_trending:main"
 
 [tool.setuptools]
-py-modules = ["github_trending"]
+py-modules = ["github_trending", "analyzer"]
