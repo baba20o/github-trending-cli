@@ -1459,6 +1459,82 @@ def print_repos(repos: list, verbose: bool = False):
                 print(f"   🔗 {url}")
 
 
+def print_repos_detailed(repos: list):
+    """Print repositories with detailed metadata fetched from GitHub API."""
+    if not repos:
+        print("No repositories found matching your criteria.")
+        return
+
+    print(f"\n🔍 Fetching details for {len(repos)} repositories...\n")
+
+    for i, repo in enumerate(repos, 1):
+        title = repo.get('title', 'Unknown')
+        stars = repo.get('stars', '0')
+        today_stars = repo.get('todayStars', '')
+        language = repo.get('language', '')
+        description = repo.get('description', '')
+
+        today_str = f" (+{today_stars} today)" if today_stars else ""
+        lang_str = f" [{language}]" if language else ""
+
+        if USE_COLOR:
+            print(f"\033[93m{i}.\033[0m \033[97m{title}\033[0m")
+            print(f"   ⭐ {stars}{today_str}\033[95m{lang_str}\033[0m")
+        else:
+            print(f"{i}. {title}")
+            print(f"   ⭐ {stars}{today_str}{lang_str}")
+
+        if description:
+            desc = description[:100] + "..." if len(description) > 100 else description
+            if USE_COLOR:
+                print(f"   \033[90m{desc}\033[0m")
+            else:
+                print(f"   {desc}")
+
+        # Fetch extra details from GitHub API
+        info = fetch_repo_info(title)
+        if info:
+            forks = info.get("forks_count", 0)
+            issues = info.get("open_issues_count", 0)
+            license_info = info.get("license", {})
+            license_name = license_info.get("spdx_id", "None") if license_info else "None"
+            topics = info.get("topics", [])
+            pushed_at = info.get("pushed_at", "")
+
+            last_push = ""
+            if pushed_at:
+                try:
+                    pushed = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+                    now = datetime.now(timezone.utc)
+                    diff = now - pushed
+                    if diff.days > 0:
+                        last_push = f"{diff.days}d ago"
+                    elif diff.seconds > 3600:
+                        last_push = f"{diff.seconds // 3600}h ago"
+                    else:
+                        last_push = f"{diff.seconds // 60}m ago"
+                except (ValueError, TypeError):
+                    last_push = pushed_at[:10]
+
+            detail_parts = [f"🍴 {forks:,}", f"🐛 {issues:,}", f"📜 {license_name}"]
+            if last_push:
+                detail_parts.append(f"📅 {last_push}")
+
+            if USE_COLOR:
+                print(f"   \033[36m{' | '.join(detail_parts)}\033[0m")
+            else:
+                print(f"   {' | '.join(detail_parts)}")
+
+            if topics:
+                topic_str = ", ".join(topics[:6])
+                if USE_COLOR:
+                    print(f"   \033[90m🏷️  {topic_str}\033[0m")
+                else:
+                    print(f"   🏷️  {topic_str}")
+
+        print()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="🚀 GitHub Trending CLI - Fetch trending repositories",
@@ -1532,7 +1608,7 @@ Cache management:
     
     # Time range and language
     parser.add_argument(
-        '-s', '--since',
+        '-s', '--since', '--period',
         choices=['daily', 'weekly', 'monthly'],
         default='daily',
         help='Time range for trending (default: daily)'
@@ -1569,20 +1645,25 @@ Cache management:
     # Sorting
     parser.add_argument(
         '--sort',
-        choices=['stars', 'name'],
-        help='Sort results (default: trending order)'
+        choices=['stars', 'name', 'today'],
+        help='Sort results (default: trending order). "today" sorts by stars gained today'
     )
     parser.add_argument(
         '--reverse',
         action='store_true',
         help='Reverse sort order'
     )
-    
+
     # Output options
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         help='Show repository URLs'
+    )
+    parser.add_argument(
+        '-d', '--detailed',
+        action='store_true',
+        help='Show detailed info inline (forks, license, last push, topics)'
     )
     parser.add_argument(
         '--csv',
@@ -1914,6 +1995,8 @@ Cache management:
         repos.sort(key=lambda x: x.get('_stars_int', 0), reverse=not args.reverse)
     elif args.sort == 'name':
         repos.sort(key=lambda x: x.get('title', '').lower(), reverse=args.reverse)
+    elif args.sort == 'today':
+        repos.sort(key=lambda x: int(str(x.get('todayStars', '0')).replace(',', '') or '0'), reverse=not args.reverse)
     
     # Limit results
     repos = repos[:args.top]
@@ -2052,14 +2135,22 @@ Cache management:
                 numbers.append(int(part))
         print_repos(repos, verbose=True)
         clone_by_number(repos, numbers, args.clone_dir, args.shallow)
+    elif args.detailed:
+        print_repos_detailed(repos)
     else:
         print_repos(repos, verbose=args.verbose)
-    
+
     # Print footer
     print("\n" + "=" * 60)
     pub_date = data.get('pubDate', 'Unknown')
     print(f"📅 Updated: {pub_date}")
-    print(f"📊 Showing {len(repos)} repositories")
+    available = len(data.get('items', []))
+    if len(repos) < args.top and len(repos) < available:
+        print(f"📊 Showing {len(repos)} repositories (filtered from {available} available)")
+    elif args.top > available:
+        print(f"📊 Showing {len(repos)} repositories ({args.top} requested, {available} available)")
+    else:
+        print(f"📊 Showing {len(repos)} repositories")
 
 
 if __name__ == '__main__':

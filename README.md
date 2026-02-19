@@ -77,7 +77,9 @@ gt -t 5                         # Top 5 only
 gt --min-stars 5000             # 5k+ stars only
 gt --search "llm"               # Search title/description
 gt --sort stars --reverse       # Sort by stars, ascending
+gt --sort today                 # Sort by stars gained today
 gt -v                           # Show repo URLs
+gt -d                           # Detailed view (forks, license, topics)
 ```
 
 ### Evaluating (no clone needed)
@@ -182,15 +184,16 @@ gt --cleanup-names repo-name --clone-dir ./workspace
 
 | Option | Description |
 |--------|-------------|
-| `-s`, `--since` | Time range: `daily`, `weekly`, `monthly` |
+| `-s`, `--since`, `--period` | Time range: `daily`, `weekly`, `monthly` |
 | `-l`, `--language` | Programming language filter |
 | `-t`, `--top` | Number of repos to show (default: 10) |
 | `--min-stars` | Minimum star count |
 | `--max-stars` | Maximum star count |
 | `--search` | Search in title/description |
-| `--sort` | Sort by: `stars`, `name` |
+| `--sort` | Sort by: `stars`, `name`, `today` |
 | `--reverse` | Reverse sort order |
 | `-v`, `--verbose` | Show repository URLs |
+| `-d`, `--detailed` | Detailed view with forks, license, topics |
 | `-i`, `--info` | Show stats for repo #N |
 | `--info-repo` | Show stats for `owner/repo` |
 | `--tree` | Show file tree for repo #N |

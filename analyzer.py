@@ -416,8 +416,14 @@ def analyze_repos(repos: list, verbose: bool = False) -> list:
             print(f"  Analyzing {i+1}/{len(repos)}: {title}...")
         
         result = analyze_repo(title)
+        # Pass through trending metadata (avoids re-fetching)
+        result["trending"] = {
+            "stars": repo_info.get("stars", ""),
+            "todayStars": repo_info.get("todayStars", repo_info.get("addStars", "")),
+            "language": repo_info.get("language", ""),
+        }
         results.append(result)
-        
+
         # Small delay to be nice to API
         time.sleep(0.2)
     
@@ -454,12 +460,18 @@ def format_analysis_table(results: list) -> str:
         
         # Pick most interesting note
         details = r.get("details", {})
+        trending = r.get("trending", {})
+        today_stars = trending.get("todayStars", "")
+
         note = details.get("recent_commits", "")
         if "Archived" in details.get("not_archived", ""):
             note = "⚠️ Archived"
         elif "No README" in details.get("readme_quality", ""):
             note = "Missing docs"
-        
+
+        if today_stars:
+            note = f"+{today_stars}⭐ {note}"
+
         note = note[:25]
         
         # Color grade
