@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+- Add `-q`/`--query` for **general GitHub search** across all repos (not just trending), via `gh search repos`.
+- Search results are normalized to the same repo schema as trending, so every evaluate/clone/export/analyze
+  command works on them by number.
+- Map `-l`/`--language`, `--min-stars`/`--max-stars`, and `--sort` (now also `forks`/`updated`) onto the search.
+- Search results cached for 30 minutes. Clarified `--search` (filters the trending list) vs `--query`.
+
 ## 1.0.2
 
 - Add `--issue` and `--issue-repo` flags to fetch full details of a single issue.

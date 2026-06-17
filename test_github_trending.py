@@ -14,6 +14,7 @@ from unittest.mock import patch
 # Import functions under test
 from github_trending import (
     filter_repos,
+    fetch_search,
     sanitize_repo_dir_name,
     get_cache_path,
     read_cache,
@@ -139,6 +140,55 @@ class TestFilterRepos(unittest.TestCase):
         result = filter_repos(SAMPLE_REPOS, min_stars=500, search="framework")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["title"], "owner/repo-a")
+
+
+# =============================================================================
+# fetch_search (general GitHub search via gh)
+# =============================================================================
+
+
+class TestFetchSearch(unittest.TestCase):
+    GH_OUTPUT = json.dumps([
+        {
+            "fullName": "owner/cool-repo",
+            "description": "  A cool AI repo  ",
+            "stargazersCount": 1234,
+            "language": "TypeScript",
+            "url": "https://github.com/owner/cool-repo",
+            "forksCount": 56,
+            "license": {"key": "mit"},
+            "isArchived": False,
+        }
+    ])
+
+    @patch("github_trending.write_cache")
+    @patch("github_trending.read_cache", return_value=None)
+    @patch("github_trending.subprocess.run")
+    @patch("github_trending.rate_limit")
+    def test_normalizes_results(self, _rl, mock_run, _rc, _wc):
+        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": self.GH_OUTPUT, "stderr": ""})()
+        data = fetch_search("ai", top=5, use_cache=False)
+        self.assertEqual(data["_source"], "search")
+        repo = data["items"][0]
+        self.assertEqual(repo["title"], "owner/cool-repo")
+        self.assertEqual(repo["stars"], "1234")  # string, so filter_repos works
+        self.assertEqual(repo["description"], "A cool AI repo")  # stripped
+        self.assertEqual(repo["license"], "mit")
+        # Normalized search results flow through the same filter as trending.
+        filtered = filter_repos(data["items"], min_stars=1000)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["_stars_int"], 1234)
+
+    @patch("github_trending.write_cache")
+    @patch("github_trending.read_cache", return_value=None)
+    @patch("github_trending.subprocess.run")
+    @patch("github_trending.rate_limit")
+    def test_builds_star_range(self, _rl, mock_run, _rc, _wc):
+        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "[]", "stderr": ""})()
+        fetch_search("ai", min_stars=100, max_stars=500, use_cache=False)
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("--stars", cmd)
+        self.assertIn("100..500", cmd)
 
 
 # =============================================================================

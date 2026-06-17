@@ -53,6 +53,7 @@ def get_cache_dir() -> Path:
 CACHE_DIR = get_cache_dir()
 CACHE_TTL = {
     "trending": 3600,      # 1 hour for trending data
+    "search": 1800,        # 30 minutes for general search results
     "repo_info": 86400,    # 24 hours for repo info
     "readme": 86400,       # 24 hours for README
     "tree": 86400,         # 24 hours for file tree
@@ -303,7 +304,87 @@ def fetch_trending(since: str, language: str, use_cache: bool = True) -> dict:
     sys.exit(1)
 
 
-def filter_repos(repos: list, min_stars: int = 0, max_stars: int = None, 
+def fetch_search(query: str, language: str = "all", sort: str = "", top: int = 10,
+                 min_stars: int = 0, max_stars: int = None, use_cache: bool = True) -> dict:
+    """General GitHub repository search via `gh search repos`.
+
+    Unlike trending (curated daily/weekly/monthly lists), this searches ALL of
+    GitHub by keyword + qualifiers. Results are normalized to the same internal
+    repo schema as trending, so every downstream command (info/tree/readme/
+    deps/clone/export/analyze) works on them identically.
+    """
+    limit = max(1, min(top, 100))  # GitHub search API caps at 100 via gh
+    cache_key = f"{query}|{language}|{sort}|{min_stars}|{max_stars}|{limit}"
+
+    if use_cache:
+        cached = read_cache("search", cache_key)
+        if cached:
+            return cached
+
+    cmd = [
+        "gh", "search", "repos", query,
+        "--json", "fullName,description,stargazersCount,language,url,forksCount,license,updatedAt,isArchived",
+        "--limit", str(limit),
+    ]
+    if language and language != "all":
+        cmd += ["--language", language]
+    # Map star bounds onto gh's --stars range qualifier.
+    if min_stars and max_stars:
+        cmd += ["--stars", f"{min_stars}..{max_stars}"]
+    elif min_stars:
+        cmd += ["--stars", f">={min_stars}"]
+    elif max_stars:
+        cmd += ["--stars", f"<={max_stars}"]
+    # Map sort; "today" has no search equivalent (no per-day metric) — ignored.
+    if sort in ("stars", "forks", "updated"):
+        cmd += ["--sort", sort, "--order", "desc"]
+
+    try:
+        rate_limit()
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("❌ GitHub CLI (gh) not found. Search requires gh — install from https://cli.github.com/")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Search error: {e}")
+        sys.exit(1)
+
+    if result.returncode != 0:
+        print(f"❌ Search failed: {result.stderr.strip()}")
+        sys.exit(1)
+
+    try:
+        results = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        print("❌ Could not parse search results.")
+        sys.exit(1)
+
+    items = []
+    for r in results:
+        lic = r.get("license")
+        items.append({
+            "title": r.get("fullName", ""),
+            "description": (r.get("description") or "").strip(),
+            "stars": str(r.get("stargazersCount", 0)),
+            "language": r.get("language", "") or "",
+            "todayStars": "",
+            "link": r.get("url", ""),
+            "forks": r.get("forksCount", 0),
+            "license": lic.get("key", "") if isinstance(lic, dict) else "",
+            "archived": r.get("isArchived", False),
+        })
+
+    data = {
+        "items": items,
+        "pubDate": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+        "_source": "search",
+        "_query": query,
+    }
+    write_cache("search", cache_key, data)
+    return data
+
+
+def filter_repos(repos: list, min_stars: int = 0, max_stars: int = None,
                  search: str = None) -> list:
     """Filter repositories by various criteria."""
     filtered = []
@@ -1544,9 +1625,15 @@ Examples:
   %(prog)s                              # Daily trending, all languages
   %(prog)s -s weekly -l python          # Weekly Python repos
   %(prog)s --min-stars 10000            # Only repos with 10k+ stars
-  %(prog)s --search "llm" --top 20      # Search for LLM-related repos
+  %(prog)s --search "llm" --top 20      # Filter trending by "llm"
   %(prog)s --csv trending.csv           # Export to CSV
   %(prog)s -l rust --json rust.json     # Export Rust repos to JSON
+
+General search (ALL of GitHub, not just trending — requires gh):
+  %(prog)s -q "ai chat electron"        # Search all repos by keyword
+  %(prog)s -q "rag" -l python --min-stars 500 --sort stars
+  %(prog)s -q "agent framework stars:>1000" --output-json
+  %(prog)s -q "llm desktop" -t 5 -i 1   # Search, then evaluate result #1
   
 Clone examples:
   %(prog)s -c                           # Interactive clone mode
@@ -1639,13 +1726,18 @@ Cache management:
     )
     parser.add_argument(
         '--search',
-        help='Search in title and description'
+        help='Filter the current trending list by title/description (client-side)'
     )
-    
+    parser.add_argument(
+        '-q', '--query',
+        help='General GitHub search across ALL repos (not just trending). '
+             'Supports qualifiers, e.g. -q "ai chat electron stars:>500". Requires gh.'
+    )
+
     # Sorting
     parser.add_argument(
         '--sort',
-        choices=['stars', 'name', 'today'],
+        choices=['stars', 'name', 'today', 'forks', 'updated'],
         help='Sort results (default: trending order). "today" sorts by stars gained today'
     )
     parser.add_argument(
@@ -1971,15 +2063,28 @@ Cache management:
     
     # Print header (skip for JSON output or raw mode)
     if not args.output_json and not args.raw:
-        print(f"\n📈 GitHub Trending - {args.since} ({args.language})")
+        if args.query:
+            print(f"\n🔎 GitHub Search - \"{args.query}\"")
+        else:
+            print(f"\n📈 GitHub Trending - {args.since} ({args.language})")
         print("=" * 60)
-    
-    # Fetch data
-    data = fetch_trending(args.since, args.language)
+
+    # Fetch data — general search (any repo) or curated trending.
+    if args.query:
+        data = fetch_search(
+            args.query,
+            language=args.language,
+            sort=args.sort,
+            top=args.top,
+            min_stars=args.min_stars,
+            max_stars=args.max_stars,
+        )
+    else:
+        data = fetch_trending(args.since, args.language)
     repos = data.get('items', [])
-    
+
     if not repos:
-        print("No trending repositories found.")
+        print("No repositories found." if args.query else "No trending repositories found.")
         return
     
     # Apply filters

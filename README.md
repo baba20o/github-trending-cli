@@ -49,6 +49,10 @@ gt
 gt -l python
 gt -l rust -s weekly
 
+# Search ALL of GitHub (not just trending)
+gt -q "ai agent desktop" --min-stars 1000 --sort stars
+gt -q "rag framework stars:>500" -l python
+
 # Evaluate a repo without cloning
 gt -i 1          # Stats
 gt --tree 1      # File structure
@@ -75,11 +79,24 @@ gt -s monthly                   # Monthly trending
 gt -l python                    # Filter by language
 gt -t 5                         # Top 5 only
 gt --min-stars 5000             # 5k+ stars only
-gt --search "llm"               # Search title/description
+gt --search "llm"               # Filter trending by title/description
 gt --sort stars --reverse       # Sort by stars, ascending
 gt --sort today                 # Sort by stars gained today
 gt -v                           # Show repo URLs
 gt -d                           # Detailed view (forks, license, topics)
+```
+
+### General Search (all of GitHub)
+
+`--search` filters the *trending* list; `-q`/`--query` searches **all of GitHub**
+by keyword + qualifiers (requires `gh`). Results flow through the same pipeline,
+so every evaluate/clone/export command works on them by number.
+
+```bash
+gt -q "ai agent desktop"            # Keyword search across all repos
+gt -q "rag" -l python --min-stars 500 --sort stars
+gt -q "agent framework stars:>1000" --output-json   # Agent mode
+gt -q "llm desktop" -t 5 && gt -r 1 # Search, then read result #1's README
 ```
 
 ### Evaluating (no clone needed)
@@ -189,7 +206,8 @@ gt --cleanup-names repo-name --clone-dir ./workspace
 | `-t`, `--top` | Number of repos to show (default: 10) |
 | `--min-stars` | Minimum star count |
 | `--max-stars` | Maximum star count |
-| `--search` | Search in title/description |
+| `--search` | Filter the trending list by title/description (client-side) |
+| `-q`, `--query` | General GitHub search across all repos (requires `gh`) |
 | `--sort` | Sort by: `stars`, `name`, `today` |
 | `--reverse` | Reverse sort order |
 | `-v`, `--verbose` | Show repository URLs |
@@ -238,6 +256,7 @@ Responses are cached locally to reduce API calls.
 | Data | TTL |
 |------|-----|
 | Trending | 1 hour |
+| Search | 30 minutes |
 | Repo info | 24 hours |
 | README | 24 hours |
 | Dependencies | 24 hours |
