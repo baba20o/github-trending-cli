@@ -266,6 +266,12 @@ Locations: `~/.cache/github-trending-cli/` (Linux/macOS) or `%LOCALAPPDATA%\gith
 
 Clear with `gt --clear-cache`.
 
+## Discovery reliability feedback
+
+See the [dated freshness, parser and structured-output findings](docs/trending-freshness-parser-feedback.md)
+for reproduction steps and proposed acceptance checks. These are documented
+limitations and proposals, not implemented fixes.
+
 ## How It Works
 
 1. **Trending data** from [isboyjc/github-trending-api](https://github.com/isboyjc/github-trending-api), with fallback to direct scraping of github.com/trending
