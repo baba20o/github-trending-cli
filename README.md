@@ -27,7 +27,7 @@ pip install -e .
 ### Requirements
 
 - **Python 3.7+** — No external packages needed
-- **GitHub CLI (`gh`)** — Required for `--info`, `--tree`, `--readme`, `--deps`, `--issues`
+- **GitHub CLI (`gh`)** — Required for `-q`/`--query`, `--info`, `--tree`, `--readme`, `--deps`, `--issues`, `--issue`
   ```bash
   # macOS
   brew install gh
@@ -92,11 +92,16 @@ gt -d                           # Detailed view (forks, license, topics)
 by keyword + qualifiers (requires `gh`). Results flow through the same pipeline,
 so every evaluate/clone/export command works on them by number.
 
+Numbers refer to the list built by the *same* command — nothing is saved between
+runs. Repeat the same `-q`/`-l`/`-s`/filter options when acting on a result,
+otherwise `gt -r 1` reads #1 of the default daily trending list instead. Trending
+data is cached for an hour, so rankings can shift once the cache refreshes.
+
 ```bash
 gt -q "ai agent desktop"            # Keyword search across all repos
 gt -q "rag" -l python --min-stars 500 --sort stars
 gt -q "agent framework stars:>1000" --output-json   # Agent mode
-gt -q "llm desktop" -t 5 && gt -r 1 # Search, then read result #1's README
+gt -q "llm desktop" -t 5 -r 1       # Search, then read result #1's README
 ```
 
 ### Evaluating (no clone needed)
@@ -122,6 +127,14 @@ Score repos on health metrics (commit activity, README quality, issue response, 
 gt --analyze                    # Health scores for top 10
 gt --analyze-detail 1           # Detailed breakdown for #1
 ```
+
+Analysis calls the GitHub REST API directly (not `gh`) and authenticates with
+`GITHUB_TOKEN` when it is set. `--analyze` first checks the remaining API budget
+and estimates about five requests per repo. Without a token, if the budget looks
+too small (or the check fails), only the first repos that fit are analyzed — at
+least one. A token skips that trimming but does not guarantee a particular quota.
+If a repo's info request fails, it is listed with an error instead of a score;
+failures in later requests are scored as missing data, which can lower the score.
 
 ### Cloning
 
@@ -190,8 +203,8 @@ gt --tree-repo owner/repo --raw
 gt --readme-repo owner/repo --readme-raw
 gt --deps-repo owner/repo --raw
 
-# 3. Clone if interesting
-gt --clone-nums 1 --shallow --clone-dir ./workspace
+# 3. Clone if interesting (repeat step 1's filters so #1 is the same repo)
+gt -l python -t 5 --clone-nums 1 --shallow --clone-dir ./workspace
 
 # 4. Cleanup
 gt --cleanup-names repo-name --clone-dir ./workspace
@@ -208,7 +221,7 @@ gt --cleanup-names repo-name --clone-dir ./workspace
 | `--max-stars` | Maximum star count |
 | `--search` | Filter the trending list by title/description (client-side) |
 | `-q`, `--query` | General GitHub search across all repos (requires `gh`) |
-| `--sort` | Sort by: `stars`, `name`, `today` |
+| `--sort` | Sort by: `stars`, `name`, `today`; with `-q` also `forks`, `updated` |
 | `--reverse` | Reverse sort order |
 | `-v`, `--verbose` | Show repository URLs |
 | `-d`, `--detailed` | Detailed view with forks, license, topics |
@@ -232,7 +245,7 @@ gt --cleanup-names repo-name --clone-dir ./workspace
 | `--analyze-detail` | Detailed score breakdown for repo #N |
 | `-c`, `--clone` | Interactive clone mode |
 | `--clone-nums` | Clone by number (`"1,3,5"` or `"1-5"`) |
-| `--clone-dir` | Clone directory |
+| `--clone-dir` | Clone directory (default: current directory; also used by `--list-clones` and cleanup) |
 | `--shallow` | Shallow clone (`--depth 1`) |
 | `-e`, `--explore` | Clone and open in editor |
 | `--editor` | Editor command (default: `code`) |
